@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Colour Palette Extractor</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='6' width='6' height='20' rx='2' fill='%23C83C3C'/%3E%3Crect x='9' y='6' width='6' height='20' rx='2' fill='%23C8C83C'/%3E%3Crect x='16' y='6' width='6' height='20' rx='2' fill='%233CC8C8'/%3E%3Crect x='23' y='6' width='6' height='20' rx='2' fill='%23643C96'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #1e1e1f;
+    --panel: #272728;
+    --edge: #343436;
+    --ghost: #2e2e30;
+    --ink: #f2f2f2;
+    --muted: #9c9c9e;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", monospace;
+    --display: Futura, "Avenir Next", "Century Gothic", Seravek, "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 system-ui, "Segoe UI", sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 40px 20px 60px;
+  }
+  main { width: 100%; max-width: 780px; }
+
+  h1 {
+    font-family: var(--display);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.38em;
+    text-transform: uppercase;
+    text-align: center;
+    color: var(--muted);
+    margin: 0 0 28px;
+  }
+  h1 span { color: var(--ink); }
+
+  .deck {
+    background: var(--panel);
+    border: 1px solid var(--edge);
+    border-radius: 14px;
+    padding: 26px 26px 20px;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+  }
+  .deck.dragging { border-color: var(--ink); }
+
+  .chips {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 640px) {
+    .chips { grid-template-columns: repeat(4, 1fr); }
+  }
+
+  .chip {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .chip:disabled { cursor: inherit; }
+  .chip-colour {
+    display: block;
+    width: 100%;
+    aspect-ratio: 5 / 7;
+    border-radius: 6px;
+    background: var(--ghost);
+    border: 1px solid var(--edge);
+    transition: background-color 0.45s ease, transform 0.2s ease;
+    transition-delay: var(--d, 0s), 0s;
+  }
+  .chip.filled .chip-colour { background: var(--swatch); border-color: transparent; }
+  .chip.filled:hover .chip-colour,
+  .chip.filled:focus-visible .chip-colour { transform: translateY(-3px); }
+  .chip-hex {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink);
+    letter-spacing: 0.02em;
+    min-height: 1.2em;
+  }
+  .chip:not(.filled) .chip-hex { color: var(--muted); }
+  .chip-share {
+    font-size: 11px;
+    color: var(--muted);
+    min-height: 1.3em;
+  }
+
+  .hint { text-align: center; color: var(--muted); margin: 0; }
+  .linklike {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+  .preview {
+    height: 76px;
+    max-width: 120px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid var(--edge);
+  }
+  .sliders { flex: 1; min-width: 240px; }
+  .slider-row {
+    display: grid;
+    grid-template-columns: 5.4em 1fr 3.2em;
+    align-items: center;
+    gap: 12px;
+  }
+  .slider-row + .slider-row { margin-top: 8px; }
+  .slider-row label { font-size: 13px; color: var(--muted); }
+  .slider-row output {
+    font-family: var(--mono);
+    font-size: 12px;
+    text-align: right;
+  }
+  .reset { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 22px;
+    background: transparent;
+    margin: 0;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(to right, #000, #fff);
+    border: 1px solid #4a4a4d; /* defines the ramp's black end against the panel */
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--ink);
+    border: 2px solid var(--bg);
+    margin-top: -6px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  }
+  input[type="range"]::-moz-range-track {
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(to right, #000, #fff);
+    border: 1px solid #4a4a4d;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--ink);
+    border: 2px solid var(--bg);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  .primary {
+    font: 600 14px/1 system-ui, "Segoe UI", sans-serif;
+    color: var(--bg);
+    background: var(--ink);
+    border: 0;
+    border-radius: 8px;
+    padding: 13px 20px;
+    cursor: pointer;
+  }
+  .primary:hover { background: #fff; }
+
+  .status {
+    text-align: center;
+    color: var(--muted);
+    min-height: 1.5em;
+    margin: 18px 0 0;
+  }
+
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Colour <span>Palette</span> Extractor</h1>
+
+  <section class="deck" id="deck" aria-label="Image drop area and extracted palette">
+    <div class="chips" id="chips"></div>
+    <p class="hint" id="hint">
+      Drop an image here — or <button type="button" class="linklike" id="browse">choose a file</button>
+    </p>
+    <input type="file" id="file" accept="image/*" hidden>
+  </section>
+
+  <div class="controls" id="controls" hidden>
+    <img class="preview" id="preview" alt="Preview of the loaded image">
+    <div class="sliders">
+      <div class="slider-row">
+        <label for="shadows">Shadows</label>
+        <input type="range" id="shadows" min="0" max="50" value="20">
+        <output id="shadowsOut" for="shadows">20%</output>
+      </div>
+      <div class="slider-row">
+        <label for="highlights">Highlights</label>
+        <input type="range" id="highlights" min="50" max="100" value="85">
+        <output id="highlightsOut" for="highlights">85%</output>
+      </div>
+      <div class="reset">
+        Darker than Shadows or lighter than Highlights is ignored ·
+        <button type="button" class="linklike" id="reset">reset to 20% / 85%</button>
+      </div>
+    </div>
+    <button type="button" class="primary" id="copyAll">Copy all 8 codes</button>
+  </div>
+
+  <p class="status" id="status" role="status"></p>
+</main>
+
+<script>
+// Core colour-extraction logic for the palette extractor.
+// Runs in both Node (for tests) and the browser (inlined into the HTML build).
+(function (global) {
+  'use strict';
+
+  function rgbToHex(r, g, b) {
+    const channel = (v) =>
+      Math.round(v).toString(16).padStart(2, '0').toUpperCase();
+    return '#' + channel(r) + channel(g) + channel(b);
+  }
+
+  // HSL lightness (0..1). Chosen over luma so saturated colours (e.g. pure
+  // blue) sit at 0.5 and are never discarded by the shadow cutoff.
+  function lightness(r, g, b) {
+    return (Math.max(r, g, b) + Math.min(r, g, b)) / 2 / 255;
+  }
+
+  // data: flat RGBA byte array (ImageData.data). Returns [r, g, b] triples
+  // that survive the shadow/highlight cutoffs (fractions 0..1, inclusive)
+  // and are at least half opaque.
+  function filterPixels(data, { shadow, highlight }) {
+    const kept = [];
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 125) continue;
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      const l = lightness(r, g, b);
+      if (l < shadow || l > highlight) continue;
+      kept.push([r, g, b]);
+    }
+    return kept;
+  }
+
+  // Deterministic PRNG so identical inputs always yield identical palettes.
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function dist2(p, c) {
+    const dr = p[0] - c[0], dg = p[1] - c[1], db = p[2] - c[2];
+    return dr * dr + dg * dg + db * db;
+  }
+
+  // pixels: array of [r, g, b]. Returns up to k clusters as
+  // { r, g, b, count }, largest cluster first. Fully deterministic.
+  function kmeans(pixels, k) {
+    if (pixels.length === 0) return [];
+    const rand = mulberry32(0xc0ffee);
+
+    // k-means++ seeding; d2 tracks each pixel's distance to nearest seed.
+    const centroids = [pixels[Math.floor(rand() * pixels.length)].slice()];
+    const d2 = new Float64Array(pixels.length).fill(Infinity);
+    while (centroids.length < k) {
+      const latest = centroids[centroids.length - 1];
+      let total = 0;
+      for (let i = 0; i < pixels.length; i++) {
+        const d = dist2(pixels[i], latest);
+        if (d < d2[i]) d2[i] = d;
+        total += d2[i];
+      }
+      if (total === 0) break; // fewer distinct colours than k
+      let target = rand() * total;
+      let idx = 0;
+      for (; idx < pixels.length - 1; idx++) {
+        target -= d2[idx];
+        if (target <= 0) break;
+      }
+      centroids.push(pixels[idx].slice());
+    }
+
+    const assignment = new Int32Array(pixels.length).fill(-1);
+    for (let iter = 0; iter < 30; iter++) {
+      let changed = false;
+      for (let i = 0; i < pixels.length; i++) {
+        let best = 0, bestD = Infinity;
+        for (let c = 0; c < centroids.length; c++) {
+          const d = dist2(pixels[i], centroids[c]);
+          if (d < bestD) { bestD = d; best = c; }
+        }
+        if (assignment[i] !== best) { assignment[i] = best; changed = true; }
+      }
+      if (!changed) break;
+      const sums = centroids.map(() => [0, 0, 0, 0]);
+      for (let i = 0; i < pixels.length; i++) {
+        const s = sums[assignment[i]];
+        const p = pixels[i];
+        s[0] += p[0]; s[1] += p[1]; s[2] += p[2]; s[3]++;
+      }
+      for (let c = 0; c < centroids.length; c++) {
+        if (sums[c][3] > 0) {
+          centroids[c] = [
+            sums[c][0] / sums[c][3],
+            sums[c][1] / sums[c][3],
+            sums[c][2] / sums[c][3],
+          ];
+        }
+      }
+    }
+
+    const counts = new Array(centroids.length).fill(0);
+    for (let i = 0; i < pixels.length; i++) counts[assignment[i]]++;
+
+    return centroids
+      .map((c, i) => ({
+        r: Math.round(c[0]),
+        g: Math.round(c[1]),
+        b: Math.round(c[2]),
+        count: counts[i],
+      }))
+      .filter((c) => c.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }
+
+  const DEFAULTS = { shadow: 0.2, highlight: 0.85, count: 8 };
+
+  // imageData: any object with a flat RGBA .data array (e.g. canvas
+  // ImageData). Returns { ok: true, colors: [{ hex, r, g, b, share }] }
+  // dominant-first, or { ok: false, reason: 'no-pixels' } when the
+  // thresholds leave nothing to work with.
+  function extractPalette(imageData, options) {
+    const opts = Object.assign({}, DEFAULTS, options);
+    const pixels = filterPixels(imageData.data, opts);
+    if (pixels.length === 0) {
+      return { ok: false, reason: 'no-pixels' };
+    }
+    const colors = kmeans(pixels, opts.count).map((c) => ({
+      hex: rgbToHex(c.r, c.g, c.b),
+      r: c.r,
+      g: c.g,
+      b: c.b,
+      share: c.count / pixels.length,
+    }));
+    return { ok: true, colors };
+  }
+
+  const api = { rgbToHex, lightness, filterPixels, kmeans, extractPalette };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = api;
+  }
+  global.PaletteCore = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
+(function () {
+  'use strict';
+  const core = window.PaletteCore;
+  const $ = (id) => document.getElementById(id);
+  const deck = $('deck'), chipsEl = $('chips'), fileInput = $('file');
+  const controls = $('controls'), preview = $('preview'), statusEl = $('status');
+  const shadows = $('shadows'), highlights = $('highlights');
+  const shadowsOut = $('shadowsOut'), highlightsOut = $('highlightsOut');
+  const copyAllBtn = $('copyAll');
+
+  const state = { imageData: null, colors: [], previewUrl: null };
+  const MAX_SIDE = 320;
+
+  function setStatus(msg) { statusEl.textContent = msg || ''; }
+
+  function renderChips(colors, stagger) {
+    chipsEl.textContent = '';
+    for (let i = 0; i < 8; i++) {
+      const c = colors[i];
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip';
+      const colour = document.createElement('span');
+      colour.className = 'chip-colour';
+      const hex = document.createElement('span');
+      hex.className = 'chip-hex';
+      const share = document.createElement('span');
+      share.className = 'chip-share';
+      if (c) {
+        chip.style.setProperty('--swatch', c.hex);
+        chip.style.setProperty('--d', stagger ? (i * 55) + 'ms' : '0ms');
+        hex.textContent = c.hex;
+        share.textContent = Math.round(c.share * 100) + '%';
+        chip.setAttribute('aria-label', 'Copy ' + c.hex);
+        chip.title = 'Click to copy ' + c.hex;
+        chip.addEventListener('click', (e) => {
+          e.stopPropagation();
+          copyText(c.hex).then(() => {
+            share.textContent = 'copied';
+            setTimeout(() => { share.textContent = Math.round(c.share * 100) + '%'; }, 1200);
+          });
+        });
+      } else {
+        chip.disabled = true;
+        hex.textContent = '—';
+        chip.setAttribute('aria-label', 'Empty palette slot');
+      }
+      chip.append(colour, hex, share);
+      chipsEl.appendChild(chip);
+      if (c) requestAnimationFrame(() => requestAnimationFrame(() => chip.classList.add('filled')));
+    }
+  }
+
+  function recompute(stagger) {
+    if (!state.imageData) return;
+    const result = core.extractPalette(state.imageData, {
+      shadow: shadows.value / 100,
+      highlight: highlights.value / 100,
+    });
+    if (!result.ok) {
+      state.colors = [];
+      renderChips([], false);
+      copyAllBtn.disabled = true;
+      setStatus('No colour left between these settings — pull the sliders apart to bring some back.');
+      return;
+    }
+    state.colors = result.colors;
+    renderChips(result.colors, stagger);
+    copyAllBtn.disabled = false;
+    const n = result.colors.length;
+    copyAllBtn.textContent = n === 1 ? 'Copy the code' : 'Copy all ' + n + ' codes';
+    setStatus(result.colors.length < 8
+      ? 'This image only has ' + result.colors.length + ' distinct colour' + (result.colors.length === 1 ? '' : 's') + ' between these settings.'
+      : '');
+  }
+
+  function loadFile(file) {
+    if (!file) return;
+    if (file.type && !file.type.startsWith('image/')) {
+      setStatus("That doesn't look like an image file — try a JPG or PNG.");
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      state.imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+      state.previewUrl = url;
+      preview.src = url;
+      controls.hidden = false;
+      setStatus('');
+      recompute(true);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      setStatus("Couldn't read that image — try a JPG or PNG.");
+    };
+    img.src = url;
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) { /* fall back below */ }
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { return document.execCommand('copy'); } finally { ta.remove(); }
+  }
+
+  // Input wiring: click, browse, drop anywhere, paste.
+  deck.addEventListener('click', () => fileInput.click());
+  $('browse').addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
+  fileInput.addEventListener('change', () => { loadFile(fileInput.files[0]); fileInput.value = ''; });
+  document.addEventListener('dragover', (e) => { e.preventDefault(); deck.classList.add('dragging'); });
+  document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) deck.classList.remove('dragging'); });
+  document.addEventListener('drop', (e) => {
+    e.preventDefault();
+    deck.classList.remove('dragging');
+    loadFile(e.dataTransfer.files && e.dataTransfer.files[0]);
+  });
+  document.addEventListener('paste', (e) => {
+    const item = Array.from(e.clipboardData.items).find((i) => i.type.startsWith('image/'));
+    if (item) loadFile(item.getAsFile());
+  });
+
+  let pending = false;
+  function onSlider() {
+    shadowsOut.textContent = shadows.value + '%';
+    highlightsOut.textContent = highlights.value + '%';
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => { pending = false; recompute(false); });
+  }
+  shadows.addEventListener('input', onSlider);
+  highlights.addEventListener('input', onSlider);
+  $('reset').addEventListener('click', () => {
+    shadows.value = 20;
+    highlights.value = 85;
+    onSlider();
+  });
+
+  copyAllBtn.addEventListener('click', () => {
+    const codes = state.colors.map((c) => c.hex).join('\n');
+    if (!codes) return;
+    const label = copyAllBtn.textContent;
+    copyText(codes).then(() => {
+      copyAllBtn.textContent = 'Copied ✓';
+      setTimeout(() => { copyAllBtn.textContent = label; }, 1400);
+    });
+  });
+
+  renderChips([], false);
+})();
+</script>
+</body>
+</html>
